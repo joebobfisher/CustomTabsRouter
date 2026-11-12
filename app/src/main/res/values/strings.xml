@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">CustomTabsRouter</string>
+    <string name="antigravity_url">https://antigravity.google.com/</string>
+    <string name="accessibility_service_description">Blocks standalone Chrome browser while allowing Custom Tabs and installed WebAPKs.</string>
+</resources>
