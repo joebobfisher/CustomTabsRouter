@@ -24,6 +24,13 @@ class ChromeBlockerService : AccessibilityService() {
             "com.android.chrome:id/home_button",
             "com.android.chrome:id/search_box_text"
         )
+
+        // Custom Tab & Chrome URL bar view IDs displaying the current domain/URL
+        private val URL_BAR_VIEW_IDS = listOf(
+            "com.android.chrome:id/url_bar",
+            "com.android.chrome:id/location_bar_status_text",
+            "com.android.chrome:id/title_bar"
+        )
     }
 
     private var lastToastTime = 0L
@@ -38,30 +45,47 @@ class ChromeBlockerService : AccessibilityService() {
         // 1. Direct check on the Activity class name for TYPE_WINDOW_STATE_CHANGED
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             if (className in BLOCKED_ACTIVITY_CLASSES) {
-                blockAndGoHome()
+                blockAndGoHome("Standalone Chrome is disabled")
                 return
             }
         }
 
-        // 2. Fallback check on the active window hierarchy in case Chrome resumes an already-open tab
+        // 2. Inspect active window hierarchy for standalone Chrome OR blocked domains inside a Custom Tab
         val root: AccessibilityNodeInfo = rootInActiveWindow ?: return
         if (root.packageName?.toString() == CHROME_PACKAGE) {
+            // 2a. Check if full tabbed Chrome UI is showing
             for (viewId in TABBED_CHROME_VIEW_IDS) {
                 val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
                 if (!nodes.isNullOrEmpty()) {
-                    blockAndGoHome()
+                    blockAndGoHome("Standalone Chrome is disabled")
                     return
+                }
+            }
+
+            // 2b. Check if a Custom Tab has navigated to a blocked domain (e.g. via Google Search results or redirects)
+            for (viewId in URL_BAR_VIEW_IDS) {
+                val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+                if (!nodes.isNullOrEmpty()) {
+                    for (node in nodes) {
+                        val text = node.text?.toString() ?: continue
+                        if (CustomTabHelper.isBlockedHost(text)) {
+                            blockAndGoHome("Blocked domain")
+                            return
+                        }
+                    }
                 }
             }
         }
     }
 
-    private fun blockAndGoHome() {
+    private fun blockAndGoHome(message: String) {
+        // First navigate back to close or pop the blocked page from the Custom Tab, then go Home
+        performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)
         val now = System.currentTimeMillis()
         if (now - lastToastTime > 1500) {
             lastToastTime = now
-            Toast.makeText(this, "Standalone Chrome is disabled", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
 
