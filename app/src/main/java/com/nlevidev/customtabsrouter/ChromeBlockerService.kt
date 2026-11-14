@@ -1,8 +1,17 @@
 package com.nlevidev.customtabsrouter
 
 import android.accessibilityservice.AccessibilityService
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.TextView
 import android.widget.Toast
 
 class ChromeBlockerService : AccessibilityService() {
@@ -28,12 +37,13 @@ class ChromeBlockerService : AccessibilityService() {
         // Custom Tab & Chrome URL bar view IDs displaying the current domain/URL
         private val URL_BAR_VIEW_IDS = listOf(
             "com.android.chrome:id/url_bar",
-            "com.android.chrome:id/location_bar_status_text",
-            "com.android.chrome:id/title_bar"
+            "com.android.chrome:id/location_bar_status_text"
         )
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var lastToastTime = 0L
+    private var currentBannerView: TextView? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -45,7 +55,7 @@ class ChromeBlockerService : AccessibilityService() {
         // 1. Direct check on the Activity class name for TYPE_WINDOW_STATE_CHANGED
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             if (className in BLOCKED_ACTIVITY_CLASSES) {
-                blockAndGoHome("Standalone Chrome is disabled")
+                blockAndGoHome("Closed: Standalone Chrome is disabled")
                 return
             }
         }
@@ -57,7 +67,7 @@ class ChromeBlockerService : AccessibilityService() {
             for (viewId in TABBED_CHROME_VIEW_IDS) {
                 val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
                 if (!nodes.isNullOrEmpty()) {
-                    blockAndGoHome("Standalone Chrome is disabled")
+                    blockAndGoHome("Closed: Standalone Chrome is disabled")
                     return
                 }
             }
@@ -68,8 +78,9 @@ class ChromeBlockerService : AccessibilityService() {
                 if (!nodes.isNullOrEmpty()) {
                     for (node in nodes) {
                         val text = node.text?.toString() ?: continue
-                        if (CustomTabHelper.isBlockedHost(text)) {
-                            blockAndGoHome("Blocked domain")
+                        val matchedDomain = CustomTabHelper.getBlockedDomain(text)
+                        if (matchedDomain != null) {
+                            blockAndGoHome("Blocked domain: $matchedDomain")
                             return
                         }
                     }
@@ -79,13 +90,70 @@ class ChromeBlockerService : AccessibilityService() {
     }
 
     private fun blockAndGoHome(message: String) {
-        // First navigate back to close or pop the blocked page from the Custom Tab, then go Home
         performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)
         val now = System.currentTimeMillis()
         if (now - lastToastTime > 1500) {
             lastToastTime = now
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            showReasonNotification(message)
+        }
+    }
+
+    private fun showReasonNotification(message: String) {
+        mainHandler.post {
+            // 1. Show an Accessibility Overlay pill (always visible on Android 12+ even from background services)
+            try {
+                val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+                currentBannerView?.let {
+                    try {
+                        wm.removeView(it)
+                    } catch (_: Exception) {}
+                    currentBannerView = null
+                }
+
+                val density = resources.displayMetrics.density
+                val banner = TextView(this).apply {
+                    text = message
+                    setTextColor(Color.WHITE)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                    gravity = Gravity.CENTER
+                    val hPad = (20 * density).toInt()
+                    val vPad = (12 * density).toInt()
+                    setPadding(hPad, vPad, hPad, vPad)
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = 24 * density
+                        setColor(Color.parseColor("#E6222222"))
+                    }
+                    elevation = 8 * density
+                }
+
+                val params = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT
+                ).apply {
+                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                    y = (96 * density).toInt()
+                }
+
+                wm.addView(banner, params)
+                currentBannerView = banner
+
+                mainHandler.postDelayed({
+                    if (currentBannerView === banner) {
+                        try {
+                            wm.removeView(banner)
+                        } catch (_: Exception) {}
+                        currentBannerView = null
+                    }
+                }, 3000L)
+            } catch (_: Exception) {
+                // Fallback to standard Toast if overlay fails
+                Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
 

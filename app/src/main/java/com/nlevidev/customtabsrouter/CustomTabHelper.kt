@@ -36,16 +36,18 @@ object CustomTabHelper {
         "startpage.com"
     )
 
-    fun isBlockedHost(rawText: String): Boolean {
+    fun getBlockedDomain(rawText: String): String? {
         val cleaned = rawText.trim().lowercase()
             .removePrefix("https://")
             .removePrefix("http://")
         val host = cleaned.substringBefore('/').substringBefore(':').substringBefore('?')
-        if (host.isEmpty()) return false
-        return BLOCKED_HOSTS.any { domain ->
+        if (host.isEmpty()) return null
+        return BLOCKED_HOSTS.firstOrNull { domain ->
             host == domain || host.endsWith(".$domain")
         }
     }
+
+    fun isBlockedHost(rawText: String): Boolean = getBlockedDomain(rawText) != null
 
     fun isSearchUrl(uri: Uri): Boolean {
         val host = uri.host?.lowercase() ?: return false
@@ -91,7 +93,8 @@ object CustomTabHelper {
 
     fun openUrl(context: Context, uri: Uri) {
         if (isBlocked(uri)) {
-            Toast.makeText(context, "Blocked domain", Toast.LENGTH_SHORT).show()
+            val host = uri.host?.lowercase() ?: "site"
+            Toast.makeText(context, "Blocked domain: $host", Toast.LENGTH_LONG).show()
             return
         }
 
