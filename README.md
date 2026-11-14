@@ -47,22 +47,33 @@ If you don't need to modify the domain blocklist, you can install the pre-built 
 
 ### 2. Download & Install the Release APK via ADB
 
-Download `CustomTabsRouter-v1.0.0.apk` from the [Latest Release](https://github.com/joebobfisher/CustomTabsRouter/releases/latest) (or via `curl` below) and run:
-
+#### Step 2.1: Download the pre-built APK from GitHub Releases
 ```bash
-# 1. Download the pre-built APK from GitHub Releases
 curl -L -o CustomTabsRouter.apk https://github.com/joebobfisher/CustomTabsRouter/releases/latest/download/CustomTabsRouter-v1.0.0.apk
+```
 
-# 2. Install the APK
+#### Step 2.2: Install the APK onto the connected phone
+```bash
 adb install -r CustomTabsRouter.apk
+```
 
-# 3. Ensure base Chrome package is enabled
+#### Step 2.3: Ensure the base Chrome package is enabled
+```bash
 adb shell pm enable com.android.chrome
+```
 
-# 4. Set CustomTabsRouter as the system Default Browser
+#### Step 2.4: Set `CustomTabsRouter` as the system Default Browser
+```bash
 adb shell cmd role add-role-holder android.app.role.BROWSER com.nlevidev.customtabsrouter
+```
 
-# 5. Enable ChromeBlockerService (preserving any existing accessibility services)
+*(Optional — verify the default browser is now set to `com.nlevidev.customtabsrouter`):*
+```bash
+adb shell cmd role get-role-holders android.app.role.BROWSER
+```
+
+#### Step 2.5: Enable `ChromeBlockerService` (preserving any existing accessibility services)
+```bash
 EXISTING=$(adb shell settings get secure enabled_accessibility_services)
 SERVICE="com.nlevidev.customtabsrouter/com.nlevidev.customtabsrouter.ChromeBlockerService"
 if [ -z "$EXISTING" ] || [ "$EXISTING" = "null" ]; then
@@ -85,11 +96,14 @@ adb shell settings put secure accessibility_enabled 1
 
 ### Step 1: Clone & Configure Android SDK Path
 
+Clone the repository:
 ```bash
 git clone https://github.com/joebobfisher/CustomTabsRouter.git
 cd CustomTabsRouter
+```
 
-# macOS default Android SDK path:
+Create `local.properties` pointing to your Android SDK (macOS default path shown):
+```bash
 echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
 ```
 
@@ -101,11 +115,13 @@ To add or remove blocked domains before building, edit `BLOCKED_HOSTS` in [`app/
 
 ### Step 3: Build the Debug APK
 
+If JDK 17 is installed via Homebrew on Apple Silicon macOS:
 ```bash
-# If JDK 17 is installed via Homebrew on Apple Silicon macOS:
 JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
+```
 
-# Or if JAVA_HOME is already configured on your system:
+Or if `JAVA_HOME` is already configured on your system:
+```bash
 ./gradlew assembleDebug
 ```
 
@@ -113,13 +129,23 @@ The compiled APK will be generated at `app/build/outputs/apk/debug/app-debug.apk
 
 ### Step 4: Install & Configure via ADB
 
-Follow steps 2–5 from the **Quick Install** section above, replacing `CustomTabsRouter.apk` with `app/build/outputs/apk/debug/app-debug.apk`:
-
+#### Step 4.1: Install your locally built APK
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell pm enable com.android.chrome
-adb shell cmd role add-role-holder android.app.role.BROWSER com.nlevidev.customtabsrouter
+```
 
+#### Step 4.2: Ensure the base Chrome package is enabled
+```bash
+adb shell pm enable com.android.chrome
+```
+
+#### Step 4.3: Set `CustomTabsRouter` as the system Default Browser
+```bash
+adb shell cmd role add-role-holder android.app.role.BROWSER com.nlevidev.customtabsrouter
+```
+
+#### Step 4.4: Enable `ChromeBlockerService`
+```bash
 EXISTING=$(adb shell settings get secure enabled_accessibility_services)
 SERVICE="com.nlevidev.customtabsrouter/com.nlevidev.customtabsrouter.ChromeBlockerService"
 if [ -z "$EXISTING" ] || [ "$EXISTING" = "null" ]; then
