@@ -34,34 +34,61 @@ Android's built-in `WebView` fails modern OAuth / Google Advanced Protection / P
 
 ---
 
-## Building & Installing on Another Android Phone
+## Quick Install from GitHub Releases (No Android SDK / Gradle Required)
+
+If you don't need to modify the domain blocklist, you can install the pre-built APK directly from [GitHub Releases](https://github.com/joebobfisher/CustomTabsRouter/releases/latest) using only `adb`.
+
+### 1. Prepare the Phone & Computer
+1. Install `adb` on your computer (`brew install android-platform-tools` on macOS).
+2. On the Android phone:
+   - Ensure **Google Chrome** (`com.android.chrome`) is installed and signed in, and install any Chrome WebAPKs ("Add to Home screen" apps) you want beforehand.
+   - Enable **Developer options** (**Settings → About phone → tap Build number 7 times**) and turn on **USB debugging** (**Settings → System → Developer options → USB debugging**).
+   - Connect the phone via USB, run `adb devices`, and tap **Allow** on the phone's *"Allow USB debugging?"* prompt.
+
+### 2. Download & Install the Release APK via ADB
+
+Download `CustomTabsRouter-v1.0.0.apk` from the [Latest Release](https://github.com/joebobfisher/CustomTabsRouter/releases/latest) (or via `curl` below) and run:
+
+```bash
+# 1. Download the pre-built APK from GitHub Releases
+curl -L -o CustomTabsRouter.apk https://github.com/joebobfisher/CustomTabsRouter/releases/latest/download/CustomTabsRouter-v1.0.0.apk
+
+# 2. Install the APK
+adb install -r CustomTabsRouter.apk
+
+# 3. Ensure base Chrome package is enabled
+adb shell pm enable com.android.chrome
+
+# 4. Set CustomTabsRouter as the system Default Browser
+adb shell cmd role add-role-holder android.app.role.BROWSER com.nlevidev.customtabsrouter
+
+# 5. Enable ChromeBlockerService (preserving any existing accessibility services)
+EXISTING=$(adb shell settings get secure enabled_accessibility_services)
+SERVICE="com.nlevidev.customtabsrouter/com.nlevidev.customtabsrouter.ChromeBlockerService"
+if [ -z "$EXISTING" ] || [ "$EXISTING" = "null" ]; then
+  adb shell settings put secure enabled_accessibility_services "$SERVICE"
+else
+  adb shell settings put secure enabled_accessibility_services "${EXISTING}:${SERVICE}"
+fi
+adb shell settings put secure accessibility_enabled 1
+```
+
+---
+
+## Building from Source (If Customizing the Code or Blocklist)
 
 ### Prerequisites
 
-1. **On the computer:**
-   - JDK 17+ (`brew install openjdk@17` on macOS)
-   - Android SDK (via Android Studio or `sdkmanager` with `platforms;android-36` and `build-tools;35.0.0+`)
-   - `adb` (`brew install android-platform-tools` on macOS)
-2. **On the target Android phone:**
-   - **Google Chrome** (`com.android.chrome`) installed and signed in.
-   - *(Optional)* Any Progressive Web Apps / WebAPKs you want on your homescreen (e.g., **Add to Home screen / Install app** from Chrome) should be installed **before** enabling `ChromeBlockerService` (or you can temporarily toggle `ChromeBlockerService` off while installing a new WebAPK).
-   - **Developer Options & USB Debugging enabled:**
-     1. Open **Settings → About phone** and tap **Build number** 7 times.
-     2. Open **Settings → System → Developer options** and turn on **USB debugging**.
-     3. Connect the phone via USB, run `adb devices`, and tap **Allow** on the phone's *"Allow USB debugging?"* prompt.
-
----
+- JDK 17+ (`brew install openjdk@17` on macOS)
+- Android SDK (via Android Studio or `sdkmanager` with `platforms;android-36` and `build-tools;35.0.0+`)
+- `adb` (`brew install android-platform-tools` on macOS)
 
 ### Step 1: Clone & Configure Android SDK Path
 
 ```bash
 git clone https://github.com/joebobfisher/CustomTabsRouter.git
 cd CustomTabsRouter
-```
 
-Set `ANDROID_HOME` (or create `local.properties` pointing to your Android SDK):
-
-```bash
 # macOS default Android SDK path:
 echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
 ```
@@ -84,41 +111,17 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
 
 The compiled APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
-### Step 4: Install the APK via ADB
+### Step 4: Install & Configure via ADB
+
+Follow steps 2–5 from the **Quick Install** section above, replacing `CustomTabsRouter.apk` with `app/build/outputs/apk/debug/app-debug.apk`:
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-### Step 5: Ensure `com.android.chrome` is Enabled
-
-Chrome must remain enabled at the package level so its `CustomTabsService`, `CustomTabActivity`, WebAuthn/passkey credentials, and installed WebAPKs function:
-
-```bash
 adb shell pm enable com.android.chrome
-```
-
-### Step 6: Set `CustomTabsRouter` as the System Default Browser
-
-```bash
 adb shell cmd role add-role-holder android.app.role.BROWSER com.nlevidev.customtabsrouter
 
-# Verify it returns "com.nlevidev.customtabsrouter":
-adb shell cmd role get-role-holders android.app.role.BROWSER
-```
-
-*(Alternatively on the phone: **Settings → Apps → Default apps → Browser app → CustomTabsRouter**.)*
-
-### Step 7: Enable `ChromeBlockerService` (Accessibility Service)
-
-#### Option A: Enable automatically via `adb` (Recommended — bypasses Android's Restricted Settings dialog)
-
-```bash
-# 1. Check if the phone already has other accessibility services enabled:
 EXISTING=$(adb shell settings get secure enabled_accessibility_services)
 SERVICE="com.nlevidev.customtabsrouter/com.nlevidev.customtabsrouter.ChromeBlockerService"
-
-# 2. Enable ChromeBlockerService (preserving any existing services):
 if [ -z "$EXISTING" ] || [ "$EXISTING" = "null" ]; then
   adb shell settings put secure enabled_accessibility_services "$SERVICE"
 else
@@ -127,9 +130,9 @@ fi
 adb shell settings put secure accessibility_enabled 1
 ```
 
-#### Option B: Enable manually on the phone
+### Troubleshooting: Enabling Accessibility Service Manually on the Phone
 
-If you ever toggle it on manually in **Settings → Accessibility → Downloaded apps → CustomTabsRouter** on Android 13+, Android may show a **"Restricted setting"** prompt because the APK was installed via ADB rather than Google Play. To unlock the toggle:
+If you ever toggle `CustomTabsRouter` on manually in **Settings → Accessibility → Downloaded apps → CustomTabsRouter** on Android 13+, Android may show a **"Restricted setting"** prompt because the APK was installed via ADB rather than Google Play. To unlock the toggle without a computer:
 1. Open **Settings → Apps → See all apps → CustomTabsRouter**.
 2. Tap the **three-dot menu (⋮)** in the top-right corner and tap **Allow restricted settings**.
 3. Return to **Settings → Accessibility → CustomTabsRouter** and turn it on.
